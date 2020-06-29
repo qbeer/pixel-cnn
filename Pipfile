@@ -9,6 +9,8 @@ yapf = "*"
 [packages]
 tensorflow-gpu = "*"
 tensorflow-datasets = "*"
+tensorflow-probability = "*"
+numpy = "*"
 
 [requires]
 python_version = "3.6"

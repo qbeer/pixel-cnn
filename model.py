@@ -9,7 +9,7 @@ class PixelCNN(tf.keras.Model):
                  hidden_size=120,
                  n_residual_blocks=10,
                  color_conditioning=True,
-                 n_logits=10):
+                 n_mixtures=10):
 
         super(PixelCNN, self).__init__()
 
@@ -34,7 +34,7 @@ class PixelCNN(tf.keras.Model):
             mask_type='B',
             color_conditioning=True,
             filters=3 * 3 *
-            n_logits,  # RGB * params for mixture of logistics ( pi_i, mu_i, s_i ) * n_logits
+            n_mixtures,  # RGB * params for mixture of logistics ( pi_i, mu_i, s_i ) * n_mixtures
             kernel_size=(1, 1),
             activation=None)
 
