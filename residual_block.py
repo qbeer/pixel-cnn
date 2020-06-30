@@ -28,4 +28,4 @@ class ResidualBlock(tf.keras.Model):
         x = self.convB_2(x)
         x = tf.nn.relu(x)
         x = self.convB_3(x)
-        return tf.math.add(x, inputs)
+        return tf.keras.layers.Add()([x, inputs])

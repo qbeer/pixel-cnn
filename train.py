@@ -1,18 +1,21 @@
+from datetime import datetime
+
+import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 
 import tensorflow_datasets as tfds
 from model import PixelCNN
 
-import numpy as np
-
-tfd = tfp.distributions
+logdir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+file_writer = tf.summary.create_file_writer(logdir + "/metrics")
+file_writer.set_as_default()
 
 ds_train = tfds.load('cifar10',
                      split='train',
                      shuffle_files='True',
                      batch_size=16,
                      as_supervised=True)
+
 ds_test = tfds.load('cifar10',
                     split='test',
                     shuffle_files='False',
@@ -46,29 +49,40 @@ def neg_log_likelihood(target, output, n_mixtures):
     overflow_cdf = tf.reduce_sum(
         (1. - tf.nn.sigmoid(arg_minus)) * mixture_scales, axis=-1)
 
-    #print(target)
-
     probs = tf.where(target < -.99, underflow_cdf,
-             tf.where(target > .99, overflow_cdf, normal_cdf))
+                     tf.where(target > .99, overflow_cdf, normal_cdf))
 
-    log_probs = tf.math.log(probs)
+    log_probs = tf.math.log(probs + 1e-12)
 
-    return tf.reduce_mean(-tf.reduce_sum(log_probs, axis=[1, 2, 3])) # reduce to sum of negative log_likelihood
+    return tf.reduce_mean(-tf.reduce_sum(
+        log_probs, axis=[1, 2, 3]))  # reduce to sum of negative log_likelihood
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=1e-2)
 
-_it = 0
+optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
 
-for images, _ in ds_train:
-    _it += 1
-    images = tf.cast(images, dtype=tf.float32) / 127.5 - 1.
+
+@tf.function
+def train_step(images):
     with tf.GradientTape() as tape:
         outputs = model(images)
         nll = neg_log_likelihood(images, outputs, 10)
     grads = tape.gradient(nll, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-    nats = nll.numpy() * np.log2(np.e) / (32 * 32)
-    if _it % 100 == 0:
-        print(nll.numpy(), nats)
+    return nll
 
+
+_it = 0
+
+for epoch in range(10):
+    for images, _ in ds_train:
+        _it += 1
+        images = tf.cast(images, dtype=tf.float32) / 127.5 - 1.
+        nll = train_step(images)
+
+        nats = nll.numpy() * np.log2(np.e) / (32 * 32 * 3)
+
+        tf.summary.scalar('nll', data=nll, step=_it)
+        tf.summary.scalar('nats', data=nats, step=_it)
+
+    model.save_weights('pixel_cnn.h5', overwrite=True)
