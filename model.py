@@ -14,7 +14,7 @@ class PixelCNN(tf.keras.Model):
         super(PixelCNN, self).__init__()
 
         self.convA = MaskConv2D(mask_type='A',
-                                color_conditioning=True,
+                                color_conditioning=color_conditioning,
                                 filters=2 * hidden_size,
                                 kernel_size=(7, 7),
                                 activation='relu')
@@ -25,15 +25,15 @@ class PixelCNN(tf.keras.Model):
         ]
 
         self.convB_1 = MaskConv2D(mask_type='B',
-                                  color_conditioning=True,
+                                  color_conditioning=color_conditioning,
                                   filters=4 * hidden_size,
                                   kernel_size=(1, 1),
                                   activation=None)
 
         self.convB_2 = MaskConv2D(
             mask_type='B',
-            color_conditioning=True,
-            filters=3 * 3 *
+            color_conditioning=color_conditioning,
+            filters=input_shape[-1] * 3 *
             n_mixtures,  # RGB * params for mixture of logistics ( pi_i, mu_i, s_i ) * n_mixtures
             kernel_size=(1, 1),
             activation=None)

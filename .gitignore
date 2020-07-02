@@ -1,3 +1,4 @@
 Pipfile.lock
 logs/
 pixel_cnn.h5
+*.h5

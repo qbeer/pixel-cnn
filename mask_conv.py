@@ -52,7 +52,7 @@ class MaskConv2D(tf.keras.layers.Conv2D):
                                       constraint=self.kernel_constraint,
                                       trainable=True,
                                       dtype=self.dtype)
-        
+
         channel_axis = self._get_channel_axis()
         self.input_spec = InputSpec(ndim=self.rank + 2,
                                     axes={channel_axis: input_channel})
@@ -101,32 +101,28 @@ class MaskConv2D(tf.keras.layers.Conv2D):
         mask = np.zeros(shape=(K, K, C_in, C_out))
         mask[:K // 2, :, :, :] = 1
         mask[K // 2, :K // 2, :, :] = 1
-        # mapping from e.g. : R, G, B to RRR, GGG, BBB
-        assert C_in % 3 == 0 and C_out % 3 == 0, 'Input and output channels must be multiples of 3!'
         if color_conditioning:
+            # mapping from e.g. : R, G, B to RRR, GGG, BBB
+            assert C_in % 3 == 0 and C_out % 3 == 0, 'Input and output channels must be multiples of 3!'
             C_in_third, C_out_third = C_in // 3, C_out // 3
             if mask_type == 'B':
-                mask[
-                    K // 2, K // 2, :C_in_third, :
-                    C_out_third] = 1  # conditioning the center pixel on R | R
+                mask[K // 2, K // 2, :C_in_third, :
+                     C_out_third] = 1  # conditioning the center pixel on R | R
                 mask[K // 2, K // 2, :2 * C_in_third, C_out_third:2 *
-                          C_out_third] = 1  # -ii- on G | RG
-                mask[K // 2, K // 2, :, 2 *
-                          C_out_third] = 1  # -ii- on B | RGB
+                     C_out_third] = 1  # -ii- on G | RG
+                mask[K // 2, K // 2, :, 2 * C_out_third] = 1  # -ii- on B | RGB
             elif mask_type == 'A':
                 """
                     Only used for the first convolution from the RGB input. It shifts the receptive field
                     to the direction of the top-left corner, successive applications would results in no
                     receptive field in deeper layers.
                 """
-                mask[
-                    K // 2, K // 2, :C_in_third, C_out_third:2 *
-                    C_out_third] = 1  # conditioning center pixel on G | R
+                mask[K // 2, K // 2, :C_in_third, C_out_third:2 *
+                     C_out_third] = 1  # conditioning center pixel on G | R
                 mask[K // 2, K // 2, :2 * C_in_third, 2 *
-                          C_out_third:] = 1  # -ii- on B | RG
+                     C_out_third:] = 1  # -ii- on B | RG
         else:
             if mask_type == 'B':
-                mask[K // 2, K //
-                          2, :, :] = 1  # condition on center pixel
+                mask[K // 2, K // 2, :, :] = 1  # condition on center pixel
 
         return tf.constant(mask, dtype=tf.float32)
