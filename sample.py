@@ -38,7 +38,7 @@ if __name__ == '__main__':
                      color_conditioning=color_conditioning,
                      input_shape=input_shape)
     model.build(input_shape=(16, *input_shape))
-    model.load_weights(f'pixel_cnn_{args.dataset}_{epochs}.h5')
+    model.load_weights(f'pixel_cnn_{args.dataset}_25.h5')
 
     random_input = np.random.uniform(size=(16, *input_shape), low=-1,
                                      high=1).astype(np.float32)

@@ -8,6 +8,8 @@ from model import PixelCNN
 
 import argparse
 
+from openai_utils import discretized_mix_logistic_loss
+
 logdir = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 file_writer = tf.summary.create_file_writer(logdir + "/metrics")
 file_writer.set_as_default()
@@ -15,8 +17,14 @@ file_writer.set_as_default()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--use_openai_loss',
+                        required=False,
+                        default=False,
+                        action='store_true')
 
     args = parser.parse_args()
+
+    print(args.use_openai_loss)
 
     hyperparams = {
         "mnist": {
@@ -50,7 +58,8 @@ if __name__ == "__main__":
     color_conditioning = hyperparams[args.dataset]['color_conditioning']
     input_shape = hyperparams[args.dataset]['input_shape']
     n_mixtures = hyperparams[args.dataset]['n_mixtures']
-    n_epochs = hyperparams[args.dataset]['n_epochs']
+    n_epochs = hyperparams[
+        args.dataset]['n_epochs'] if not args.use_openai_loss else 250
 
     model = PixelCNN(n_mixtures=n_mixtures,
                      color_conditioning=color_conditioning,
@@ -96,8 +105,11 @@ if __name__ == "__main__":
     def train_step(images):
         with tf.GradientTape() as tape:
             outputs = model(images)
-            nll = neg_log_likelihood(images, outputs, n_mixtures,
-                                     input_shape[-1])
+            if args.dataset == 'cifar10' and args.use_openai_loss:
+                nll = discretized_mix_logistic_loss(images, outputs)
+            else:
+                nll = neg_log_likelihood(images, outputs, n_mixtures,
+                                         input_shape[-1])
         grads = tape.gradient(nll, model.trainable_variables)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
@@ -116,8 +128,6 @@ if __name__ == "__main__":
             nll = train_step(images)
 
             nats = nll.numpy() * np.log2(np.e) / np.prod(input_shape)
-
-            print(nll.numpy())
 
             tf.summary.scalar('nll', data=nll, step=_it)
             tf.summary.scalar('nats', data=nats, step=_it)
