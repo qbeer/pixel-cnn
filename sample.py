@@ -7,10 +7,34 @@ import numpy as np
 import tensorflow_probability as tfp
 
 import argparse
+from openai_utils import sample_from_discretized_mix_logistic
+
+
+def sample_from_logits(output):
+    B, H, W, total_channels = output.shape
+    output = tf.reshape(output,
+                        shape=(B, H, W, input_shape[-1], 3 * n_mixtures))
+    means = output[:, x, y, c, :n_mixtures]
+    log_scales_inverse = output[:, x, y, c, n_mixtures:2 * n_mixtures]
+    mixture_scales = output[:, x, y, c, n_mixtures * 2:]
+
+    mixture_scales = tf.nn.softmax(mixture_scales, axis=-1)  # last index
+    scales_inverse = tf.math.exp(log_scales_inverse)
+
+    logistcs = tfp.distributions.Logistic(loc=means, scale=scales_inverse)
+
+    sample = tf.reduce_sum(logistcs.sample() * mixture_scales, axis=-1)
+
+    return sample
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--use_openai_sampler',
+                        required=False,
+                        default=False,
+                        action='store_true')
 
     args = parser.parse_args()
 
@@ -18,7 +42,7 @@ if __name__ == '__main__':
         "mnist": {
             "input_shape": (28, 28, 1),
             "color_conditioning": False,
-            "n_mixtures": 5,
+            "n_mixtures": 10,
             "epochs": 1
         },
         "cifar10": {
@@ -38,7 +62,9 @@ if __name__ == '__main__':
                      color_conditioning=color_conditioning,
                      input_shape=input_shape)
     model.build(input_shape=(16, *input_shape))
-    model.load_weights(f'pixel_cnn_{args.dataset}_25.h5')
+    model.load_weights(
+        f'weights/pixel_cnn_{args.dataset}_{epochs if (not args.use_openai_sampler or args.dataset == "mnist") else 250}.h5'
+    )
 
     random_input = np.random.uniform(size=(16, *input_shape), low=-1,
                                      high=1).astype(np.float32)
@@ -48,29 +74,14 @@ if __name__ == '__main__':
     for x in range(input_shape[0]):
         for y in range(input_shape[1]):
             for c in range(input_shape[-1]):
-                B, H, W, total_channels = output.shape
-                output = output = tf.reshape(output,
-                                             shape=(B, H, W, input_shape[-1],
-                                                    3 * n_mixtures))
-                means = output[:, x, y, c, :n_mixtures]
-                log_scales_inverse = output[:, x, y, c, n_mixtures:2 *
-                                            n_mixtures]
-                mixture_scales = output[:, x, y, c, n_mixtures * 2:]
 
-                mixture_scales = tf.nn.softmax(mixture_scales,
-                                               axis=-1)  # last index
-                scales_inverse = tf.math.exp(log_scales_inverse)
+                if args.use_openai_sampler:
+                    sample = sample_from_discretized_mix_logistic(
+                        output, 3 if args.dataset == 'mnist' else 9)
+                else:
+                    sample = sample_from_logits(output)
 
-                logistcs = tfp.distributions.Logistic(loc=means,
-                                                      scale=1. /
-                                                      (scales_inverse + 1e-12))
-
-                sample = tf.reduce_sum(logistcs.sample() * mixture_scales,
-                                       axis=-1)
-
-                print(sample)
-
-                random_input[:, x, y, c] = sample
+                random_input[:, x, y, c] = sample[:, x, y, c]
 
                 output = model(random_input)
 

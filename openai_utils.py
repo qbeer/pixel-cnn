@@ -102,7 +102,7 @@ def discretized_mix_logistic_loss(x, l, sum_all=True):
     # now select the right output: left edge case, right edge case, normal case, extremely low prob case (doesn't actually happen for us)
 
     # this is what we are really doing, but using the robust version below for extreme cases in other applications and to avoid NaN issue with tf.select()
-    # log_probs = tf.select(x < -0.999, log_cdf_plus, tf.select(x > 0.999, log_one_minus_cdf_min, tf.log(cdf_delta)))
+    # log_probs = tf.select(x < -0.999, log_cdf_plus, tf.select(x > 0.999, log_one_minus_cdf_min, tf.math.log(cdf_delta)))
 
     # robust version, that still works if probabilities are below 1e-5 (which never happens in our code)
     # tensorflow backpropagates through tf.select() by multiplying with zero instead of selecting: this requires use to use some ugly tricks to avoid potential NaNs
@@ -121,3 +121,41 @@ def discretized_mix_logistic_loss(x, l, sum_all=True):
         return -tf.reduce_sum(log_sum_exp(log_probs))
     else:
         return -tf.reduce_sum(log_sum_exp(log_probs), [1, 2])
+
+
+def sample_from_discretized_mix_logistic(l, nr_mix):
+    ls = int_shape(l)
+    xs = ls[:-1] + [3]
+    # unpack parameters
+    logit_probs = l[:, :, :, :nr_mix]
+    l = tf.reshape(l[:, :, :, nr_mix:], xs + [nr_mix * 3])
+    # sample mixture indicator from softmax
+    sel = tf.one_hot(tf.argmax(
+        logit_probs - tf.math.log(-tf.math.log(
+            tf.random.uniform(
+                logit_probs.get_shape(), minval=1e-5, maxval=1. - 1e-5))), 3),
+                     depth=nr_mix,
+                     dtype=tf.float32)
+    sel = tf.reshape(sel, xs[:-1] + [1, nr_mix])
+    # select logistic parameters
+    means = tf.reduce_sum(l[:, :, :, :, :nr_mix] * sel, 4)
+    log_scales = tf.maximum(
+        tf.reduce_sum(l[:, :, :, :, nr_mix:2 * nr_mix] * sel, 4), -7.)
+    coeffs = tf.reduce_sum(
+        tf.nn.tanh(l[:, :, :, :, 2 * nr_mix:3 * nr_mix]) * sel, 4)
+    # sample from logistic & clip to interval
+    # we don't actually round to the nearest 8bit value when sampling
+    u = tf.random.uniform(means.get_shape(), minval=1e-5, maxval=1. - 1e-5)
+    x = means + tf.exp(log_scales) * (tf.math.log(u) - tf.math.log(1. - u))
+    x0 = tf.minimum(tf.maximum(x[:, :, :, 0], -1.), 1.)
+    x1 = tf.minimum(tf.maximum(x[:, :, :, 1] + coeffs[:, :, :, 0] * x0, -1.),
+                    1.)
+    x2 = tf.minimum(
+        tf.maximum(
+            x[:, :, :, 2] + coeffs[:, :, :, 1] * x0 + coeffs[:, :, :, 2] * x1,
+            -1.), 1.)
+    return tf.concat([
+        tf.reshape(x0, xs[:-1] + [1]),
+        tf.reshape(x1, xs[:-1] + [1]),
+        tf.reshape(x2, xs[:-1] + [1])
+    ], 3)

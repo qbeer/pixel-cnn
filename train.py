@@ -31,7 +31,7 @@ if __name__ == "__main__":
             "lr": 1e-8,
             "input_shape": (28, 28, 1),
             "color_conditioning": False,
-            "n_mixtures": 5,
+            "n_mixtures": 10,
             "n_epochs": 1
         },
         "cifar10": {
@@ -132,5 +132,5 @@ if __name__ == "__main__":
             tf.summary.scalar('nll', data=nll, step=_it)
             tf.summary.scalar('nats', data=nats, step=_it)
 
-        model.save_weights(f'pixel_cnn_{args.dataset}_{epoch + 1}.h5',
+        model.save_weights(f'weights/pixel_cnn_{args.dataset}_{epoch + 1}.h5',
                            overwrite=True)
